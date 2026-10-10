@@ -404,3 +404,51 @@ while True:
     except KeyboardInterrupt:
         print("\nNOVA: Conversation stopped.")
         break
+# ============================================
+# AUTOMATED CHATBOT TESTS
+# ============================================
+
+test_bot = IntelligentChatbot("NOVA")
+
+tests = [
+    "hello",
+    "who are you",
+    "what is artificial intelligence",
+    "what is the date"
+]
+
+print("AUTOMATED TEST RESULTS")
+print("=" * 50)
+
+for question in tests:
+    answer, confidence = test_bot.reply(question)
+
+    print("Question:", question)
+    print("Answer:", answer)
+    print(f"Confidence: {confidence:.0%}")
+    print("-" * 50)
+
+# Teach the bot a new answer
+print("\nLEARNING TEST")
+
+print(test_bot.reply(
+    "teach: What is Python? | Python is a versatile programming language."
+)[0])
+
+# Ask the same question
+print("\nLEARNED RESPONSE")
+
+answer, confidence = test_bot.reply("What is Python?")
+
+print("NOVA:", answer)
+print(f"Confidence: {confidence:.0%}")
+
+# Test memory
+test_bot.reply("My name is Alex")
+
+print("\nMEMORY TEST")
+print("NOVA:", test_bot.reply("What is my name")[0])
+
+# Show statistics
+print("\nFINAL STATISTICS")
+print(test_bot.reply("stats")[0])
