@@ -1,0 +1,406 @@
+# ============================================
+# ADVANCED AI CHATBOT
+# PURE PYTHON - NO EXTERNAL LIBRARIES
+# ============================================
+
+import re
+import random
+import json
+import os
+from datetime import datetime
+from difflib import SequenceMatcher
+
+
+class IntelligentChatbot:
+
+    def __init__(self, name="NOVA"):
+        self.name = name
+        self.user_name = None
+        self.memory = {}
+        self.knowledge = {}
+        self.conversation = []
+
+        self.stats = {
+            "messages": 0,
+            "recognized": 0,
+            "unknown": 0,
+            "learned": 0
+        }
+
+        self.intents = {
+            "greeting": [
+                "hello", "hi", "hey", "good morning",
+                "good afternoon", "good evening"
+            ],
+            "farewell": [
+                "bye", "goodbye", "see you", "exit"
+            ],
+            "thanks": [
+                "thanks", "thank you", "thx"
+            ],
+            "identity": [
+                "who are you", "your name",
+                "what are you", "introduce yourself"
+            ],
+            "help": [
+                "help", "what can you do",
+                "your features", "commands"
+            ],
+            "time": [
+                "what time is it", "current time",
+                "tell me the time"
+            ],
+            "date": [
+                "what is the date", "today's date",
+                "current date", "what day is it"
+            ],
+            "mood": [
+                "how are you", "how are you doing"
+            ],
+            "capabilities": [
+                "what is ai", "artificial intelligence",
+                "machine learning", "python"
+            ]
+        }
+
+        self.responses = {
+            "greeting": [
+                "Hello! How can I help you today?",
+                "Hi there! What would you like to discuss?",
+                "Hey! I'm ready to chat."
+            ],
+            "farewell": [
+                "Goodbye! Have a great day!",
+                "See you next time!",
+                "It was nice chatting with you!"
+            ],
+            "thanks": [
+                "You're welcome!",
+                "Happy to help!",
+                "Anytime!"
+            ],
+            "identity": [
+                "I'm NOVA, a Python-based intelligent chatbot."
+            ],
+            "help": [
+                "You can chat with me, teach me answers, "
+                "ask for the time or date, and inspect my stats."
+            ],
+            "mood": [
+                "I'm running properly and ready to help!"
+            ],
+            "capabilities": [
+                "I can recognize basic intents, match learned "
+                "questions, and remember information during a session."
+            ]
+        }
+
+        self.load_knowledge()
+
+    # ----------------------------------------
+    # TEXT PROCESSING
+    # ----------------------------------------
+
+    def normalize(self, text):
+        text = text.lower().strip()
+        text = re.sub(r"[^\w\s']", "", text)
+        text = re.sub(r"\s+", " ", text)
+        return text
+
+    def similarity(self, first, second):
+        return SequenceMatcher(
+            None,
+            self.normalize(first),
+            self.normalize(second)
+        ).ratio()
+
+    # ----------------------------------------
+    # SAVE AND LOAD LEARNED KNOWLEDGE
+    # ----------------------------------------
+
+    def load_knowledge(self):
+        filename = "nova_knowledge.json"
+
+        if os.path.exists(filename):
+            try:
+                with open(filename, "r", encoding="utf-8") as file:
+                    self.knowledge = json.load(file)
+            except (OSError, json.JSONDecodeError):
+                self.knowledge = {}
+
+    def save_knowledge(self):
+        try:
+            with open(
+                "nova_knowledge.json", "w", encoding="utf-8"
+            ) as file:
+                json.dump(
+                    self.knowledge,
+                    file,
+                    indent=4,
+                    ensure_ascii=False
+                )
+            return True
+        except OSError:
+            return False
+
+    # ----------------------------------------
+    # LEARNING MECHANISM
+    # ----------------------------------------
+
+    def learn(self, question, answer):
+        question = question.strip()
+        answer = answer.strip()
+
+        if not question or not answer:
+            return "Question and answer cannot be empty."
+
+        normalized_question = self.normalize(question)
+
+        self.knowledge[normalized_question] = answer
+        self.stats["learned"] += 1
+
+        return f"I learned a new answer for: {question}"
+
+    def find_learned_answer(self, text):
+        normalized = self.normalize(text)
+
+        # First, check for an exact match
+        if normalized in self.knowledge:
+            return self.knowledge[normalized], 1.0
+
+        # Then, look for a similar learned question
+        best_question = None
+        best_score = 0.0
+
+        for question in self.knowledge:
+            score = self.similarity(normalized, question)
+
+            if score > best_score:
+                best_score = score
+                best_question = question
+
+        if best_question and best_score >= 0.78:
+            return self.knowledge[best_question], best_score
+
+        return None, 0.0
+
+    # ----------------------------------------
+    # INTENT RECOGNITION
+    # ----------------------------------------
+
+    def detect_intent(self, text):
+        normalized = self.normalize(text)
+
+        for intent, examples in self.intents.items():
+            for example in examples:
+                example_normalized = self.normalize(example)
+
+                if normalized == example_normalized:
+                    return intent, 1.0
+
+                # Short phrases are matched only as whole phrases
+                # to avoid accidental substring matches.
+                if (
+                    len(example_normalized) >= 5
+                    and re.search(
+                        r"\b" + re.escape(example_normalized) + r"\b",
+                        normalized
+                    )
+                ):
+                    return intent, 0.90
+
+        return None, 0.0
+
+    # ----------------------------------------
+    # CONVERSATION MEMORY
+    # ----------------------------------------
+
+    def remember_name(self, text):
+        match = re.search(
+            r"\bmy name is\s+([A-Za-z][A-Za-z '\-]{0,39})",
+            text,
+            re.IGNORECASE
+        )
+
+        if match:
+            self.user_name = match.group(1).strip()
+            return (
+                f"Nice to meet you, {self.user_name}! "
+                "I'll remember your name during this session."
+            )
+
+        return None
+
+    # ----------------------------------------
+    # MAIN RESPONSE ENGINE
+    # ----------------------------------------
+
+    def reply(self, text):
+        text = text.strip()
+
+        if not text:
+            return "Please enter a message.", 0.0
+
+        self.stats["messages"] += 1
+
+        self.conversation.append({
+            "time": datetime.now().isoformat(timespec="seconds"),
+            "user": text
+        })
+
+        # 1. Learn from explicit teaching commands
+        if text.lower().startswith("teach:"):
+            content = text[6:].strip()
+
+            if "|" not in content:
+                return (
+                    "Use this format: teach: question | answer",
+                    1.0
+                )
+
+            question, answer = content.split("|", 1)
+
+            result = self.learn(question, answer)
+            return result, 1.0
+
+        # 2. Save learned knowledge
+        if self.normalize(text) == "save":
+            if self.save_knowledge():
+                return "My learned knowledge has been saved.", 1.0
+            return "I couldn't save the knowledge file.", 1.0
+
+        # 3. Show help
+        if self.normalize(text) == "help":
+            return (
+                "Commands:\n"
+                "• teach: question | answer\n"
+                "• my name is YourName\n"
+                "• what is my name\n"
+                "• time\n"
+                "• date\n"
+                "• stats\n"
+                "• save\n"
+                "• quit",
+                1.0
+            )
+
+        # 4. Statistics
+        if self.normalize(text) == "stats":
+            return (
+                f"Messages: {self.stats['messages']}\n"
+                f"Recognized intents: {self.stats['recognized']}\n"
+                f"Unknown questions: {self.stats['unknown']}\n"
+                f"Learning operations: {self.stats['learned']}\n"
+                f"Knowledge entries: {len(self.knowledge)}\n"
+                f"Conversation messages stored: "
+                f"{len(self.conversation)}",
+                1.0
+            )
+
+        # 5. Remember the user's name
+        name_response = self.remember_name(text)
+
+        if name_response:
+            self.stats["recognized"] += 1
+            return name_response, 1.0
+
+        # 6. Recall the user's name
+        if self.normalize(text) in {
+            "what is my name",
+            "whats my name",
+            "do you know my name"
+        }:
+            self.stats["recognized"] += 1
+
+            if self.user_name:
+                return f"Your name is {self.user_name}.", 1.0
+
+            return "You haven't told me your name yet.", 1.0
+
+        # 7. Check learned questions before general intents
+        answer, score = self.find_learned_answer(text)
+
+        if answer is not None:
+            self.stats["recognized"] += 1
+            return answer, score
+
+        # 8. Check the date
+        if self.normalize(text) in {
+            "date", "today", "current date", "what is the date"
+        }:
+            self.stats["recognized"] += 1
+            return datetime.now().strftime("%A, %d %B %Y"), 1.0
+
+        # 9. Check the time
+        if self.normalize(text) in {
+            "time", "current time", "what time is it"
+        }:
+            self.stats["recognized"] += 1
+            return datetime.now().strftime("%I:%M:%S %p"), 1.0
+
+        # 10. Recognize common intents
+        intent, confidence = self.detect_intent(text)
+
+        if intent is not None:
+            self.stats["recognized"] += 1
+
+            choices = self.responses.get(intent)
+
+            if choices:
+                return random.choice(choices), confidence
+
+            if intent == "time":
+                return datetime.now().strftime("%I:%M:%S %p"), 1.0
+
+            if intent == "date":
+                return datetime.now().strftime("%A, %d %B %Y"), 1.0
+
+        # 11. Unknown question handling
+        self.stats["unknown"] += 1
+
+        return (
+            "I'm not sure how to answer that yet. "
+            "You can teach me using:\n"
+            "teach: your question | your answer",
+            0.0
+        )
+
+
+print("NOVA chatbot engine loaded successfully!")
+</CodeBlock>
+
+## Step 3 — Start chatting with NOVA
+
+Paste this into your **second cell** and run it. This starts the conversation loop.
+
+```python
+# ============================================
+# START THE CHATBOT
+# ============================================
+
+bot = IntelligentChatbot("NOVA")
+
+print("=" * 50)
+print("       NOVA - INTELLIGENT CHATBOT")
+print("=" * 50)
+print("Type 'help' to see commands.")
+print("Type 'quit' to end the conversation.")
+print("-" * 50)
+
+while True:
+    try:
+        user_input = input("You: ").strip()
+
+        if user_input.lower() in {"quit", "exit", "stop"}:
+            print("NOVA: " + "Goodbye! See you next time!")
+            break
+
+        response, confidence = bot.reply(user_input)
+
+        print("\nNOVA:", response)
+        print(f"[Match confidence: {confidence:.0%}]")
+        print("-" * 50)
+
+    except KeyboardInterrupt:
+        print("\nNOVA: Conversation stopped.")
+        break
